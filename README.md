@@ -30,4 +30,4 @@ The script builds for the current Mac architecture and signs the app locally wit
 
 ## License
 
-Copyright © 2026 Kalk. Licensed under the GNU General Public License version 3 only (GPL-3.0-only). See [LICENSE](LICENSE). The application code license does not cover the radio broadcasts or third-party streams.
+Copyright © 2026 cialu.net | Licensed under the GNU General Public License version 3 only (GPL-3.0-only). See [LICENSE](LICENSE). The application code license does not cover the radio broadcasts or third-party streams.
