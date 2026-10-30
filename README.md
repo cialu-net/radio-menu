@@ -9,7 +9,7 @@ A small native macOS menu bar app for listening to internet radio. Choose a stat
 
 - Three preset stations and support for adding direct HTTP or HTTPS audio stream URLs.
 - Play, stop, volume control and a persistent station list.
-- Optional animated menu bar icon and optional playback of the last station at launch.
+- Optional animated menu bar icon, launch at login, and playback of the last station at launch.
 - English, Spanish, German, French, Italian and Simplified Chinese, or automatic system-language selection.
 
 Internet streams are supplied by third parties and may change, be unavailable or have geographic restrictions. A radio station's webpage is not necessarily its direct audio stream URL.
