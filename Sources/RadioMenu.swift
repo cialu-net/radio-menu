@@ -1,4 +1,5 @@
 // Radio Menu — Copyright (C) 2026 Kalk
+// Version: see CFBundleShortVersionString in Resources/Info.plist
 // Website: https://cialu.net | Code: https://github.com/cialu-net
 // SPDX-License-Identifier: GPL-3.0-only
 // Distributed under the GNU General Public License version 3, without warranty.
@@ -23,12 +24,12 @@ enum L {
         "zh": ["choose":"选择电台", "connecting":"正在连接 %@…", "playing":"正在播放：%@", "failed":"无法播放此电台", "invalid":"地址无效", "stopped":"播放已停止", "quit":"退出", "empty":"暂无电台，请在下方添加。", "delete":"删除电台", "stop":"停止", "volume":"音量", "name":"电台名称", "url":"直播流直链（HTTPS 或 HTTP）", "cancel":"取消", "save":"保存", "add":"添加电台", "validation":"请输入名称和有效的 HTTP 或 HTTPS 地址。"]
     ]
     static let settingsTranslations: [String: [String: String]] = [
-        "it": ["credits":"Crediti", "author":"Autore", "site":"Sito", "code":"Codice", "license":"Licenza", "settings":"Impostazioni…", "title":"Impostazioni", "language":"Lingua", "system":"Lingua del sistema", "animated":"Icona animata durante la riproduzione", "resume":"Riproduci l’ultima stazione all’avvio"],
-        "en": ["credits":"Credits", "author":"Author", "site":"Website", "code":"Code", "license":"License", "settings":"Settings…", "title":"Settings", "language":"Language", "system":"System language", "animated":"Animate icon during playback", "resume":"Play last station on launch"],
-        "es": ["credits":"Créditos", "author":"Autor", "site":"Sitio web", "code":"Código", "license":"Licencia", "settings":"Ajustes…", "title":"Ajustes", "language":"Idioma", "system":"Idioma del sistema", "animated":"Animar el icono durante la reproducción", "resume":"Reproducir la última emisora al iniciar"],
-        "de": ["credits":"Mitwirkende", "author":"Autor", "site":"Website", "code":"Quellcode", "license":"Lizenz", "settings":"Einstellungen…", "title":"Einstellungen", "language":"Sprache", "system":"Systemsprache", "animated":"Symbol während der Wiedergabe animieren", "resume":"Letzten Sender beim Start wiedergeben"],
-        "fr": ["credits":"Crédits", "author":"Auteur", "site":"Site web", "code":"Code", "license":"Licence", "settings":"Réglages…", "title":"Réglages", "language":"Langue", "system":"Langue du système", "animated":"Animer l’icône pendant la lecture", "resume":"Lire la dernière station au démarrage"],
-        "zh": ["credits":"鸣谢", "author":"作者", "site":"网站", "code":"源代码", "license":"许可证", "settings":"设置…", "title":"设置", "language":"语言", "system":"系统语言", "animated":"播放时显示动画图标", "resume":"启动时播放上次收听的电台"]
+        "it": ["version":"Versione", "credits":"Crediti", "author":"Autore", "site":"Sito", "code":"Codice", "license":"Licenza", "settings":"Impostazioni…", "title":"Impostazioni", "language":"Lingua", "system":"Lingua del sistema", "animated":"Icona animata durante la riproduzione", "resume":"Riproduci l’ultima stazione all’avvio"],
+        "en": ["version":"Version", "credits":"Credits", "author":"Author", "site":"Website", "code":"Code", "license":"License", "settings":"Settings…", "title":"Settings", "language":"Language", "system":"System language", "animated":"Animate icon during playback", "resume":"Play last station on launch"],
+        "es": ["version":"Versión", "credits":"Créditos", "author":"Autor", "site":"Sitio web", "code":"Código", "license":"Licencia", "settings":"Ajustes…", "title":"Ajustes", "language":"Idioma", "system":"Idioma del sistema", "animated":"Animar el icono durante la reproducción", "resume":"Reproducir la última emisora al iniciar"],
+        "de": ["version":"Version", "credits":"Mitwirkende", "author":"Autor", "site":"Website", "code":"Quellcode", "license":"Lizenz", "settings":"Einstellungen…", "title":"Einstellungen", "language":"Sprache", "system":"Systemsprache", "animated":"Symbol während der Wiedergabe animieren", "resume":"Letzten Sender beim Start wiedergeben"],
+        "fr": ["version":"Version", "credits":"Crédits", "author":"Auteur", "site":"Site web", "code":"Code", "license":"Licence", "settings":"Réglages…", "title":"Réglages", "language":"Langue", "system":"Langue du système", "animated":"Animer l’icône pendant la lecture", "resume":"Lire la dernière station au démarrage"],
+        "zh": ["version":"版本", "credits":"鸣谢", "author":"作者", "site":"网站", "code":"源代码", "license":"许可证", "settings":"设置…", "title":"设置", "language":"语言", "system":"系统语言", "animated":"播放时显示动画图标", "resume":"启动时播放上次收听的电台"]
     ]
     static func text(_ key: String) -> String { settingsTranslations[language]?[key] ?? translations[language]?[key] ?? settingsTranslations["en"]?[key] ?? translations["en"]?[key] ?? key }
     static func format(_ key: String, _ value: String) -> String { String(format: text(key), value) }
@@ -189,13 +190,14 @@ struct SettingsView: View {
             Divider()
             Text(L.text("credits")).font(.headline)
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
+                GridRow { Text(L.text("version")); Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") }
                 GridRow { Text(L.text("author")); Text("Kalk") }
                 GridRow { Text(L.text("site")); Link("cialu.net", destination: URL(string: "https://cialu.net")!) }
                 GridRow { Text(L.text("code")); Link("github.com/cialu-net", destination: URL(string: "https://github.com/cialu-net")!) }
                 GridRow { Text(L.text("license")); Link("GNU GPL v3", destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!) }
             }.font(.callout)
             Spacer(minLength: 0)
-        }.padding(24).frame(width: 440, height: 370)
+        }.padding(24).frame(width: 440, height: 400)
     }
 }
 
