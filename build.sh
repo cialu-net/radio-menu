@@ -6,6 +6,7 @@ APP="build/RadioMenu.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" build/module-cache
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 swiftc -module-cache-path build/module-cache -parse-as-library -target "$(uname -m)-apple-macosx13.0" Sources/RadioMenu.swift -o "$APP/Contents/MacOS/RadioMenu"
 codesign --force --sign - "$APP"
 printf 'Built %s\n' "$APP"
