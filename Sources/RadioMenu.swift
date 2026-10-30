@@ -8,6 +8,7 @@ import SwiftUI
 import AVFoundation
 import AppKit
 import Combine
+import ServiceManagement
 
 enum L {
     static var language: String {
@@ -24,12 +25,12 @@ enum L {
         "zh": ["choose":"选择电台", "connecting":"正在连接 %@…", "playing":"正在播放：%@", "failed":"无法播放此电台", "invalid":"地址无效", "stopped":"播放已停止", "quit":"退出", "empty":"暂无电台，请在下方添加。", "delete":"删除电台", "stop":"停止", "volume":"音量", "name":"电台名称", "url":"直播流直链（HTTPS 或 HTTP）", "cancel":"取消", "save":"保存", "add":"添加电台", "validation":"请输入名称和有效的 HTTP 或 HTTPS 地址。"]
     ]
     static let settingsTranslations: [String: [String: String]] = [
-        "it": ["version":"Versione", "credits":"Crediti", "author":"Autore", "site":"Sito", "code":"Codice", "license":"Licenza", "settings":"Impostazioni…", "title":"Impostazioni", "language":"Lingua", "system":"Lingua del sistema", "animated":"Icona animata durante la riproduzione", "resume":"Riproduci l’ultima stazione all’avvio"],
-        "en": ["version":"Version", "credits":"Credits", "author":"Author", "site":"Website", "code":"Code", "license":"License", "settings":"Settings…", "title":"Settings", "language":"Language", "system":"System language", "animated":"Animate icon during playback", "resume":"Play last station on launch"],
-        "es": ["version":"Versión", "credits":"Créditos", "author":"Autor", "site":"Sitio web", "code":"Código", "license":"Licencia", "settings":"Ajustes…", "title":"Ajustes", "language":"Idioma", "system":"Idioma del sistema", "animated":"Animar el icono durante la reproducción", "resume":"Reproducir la última emisora al iniciar"],
-        "de": ["version":"Version", "credits":"Mitwirkende", "author":"Autor", "site":"Website", "code":"Quellcode", "license":"Lizenz", "settings":"Einstellungen…", "title":"Einstellungen", "language":"Sprache", "system":"Systemsprache", "animated":"Symbol während der Wiedergabe animieren", "resume":"Letzten Sender beim Start wiedergeben"],
-        "fr": ["version":"Version", "credits":"Crédits", "author":"Auteur", "site":"Site web", "code":"Code", "license":"Licence", "settings":"Réglages…", "title":"Réglages", "language":"Langue", "system":"Langue du système", "animated":"Animer l’icône pendant la lecture", "resume":"Lire la dernière station au démarrage"],
-        "zh": ["version":"版本", "credits":"鸣谢", "author":"作者", "site":"网站", "code":"源代码", "license":"许可证", "settings":"设置…", "title":"设置", "language":"语言", "system":"系统语言", "animated":"播放时显示动画图标", "resume":"启动时播放上次收听的电台"]
+        "it": ["login":"Avvia Radio Menu al login", "loginApproval":"Per completare l’attivazione, consenti Radio Menu negli Elementi login di macOS.", "loginOpen":"Apri Elementi login", "loginError":"Impossibile modificare l’avvio al login. Verifica gli Elementi login nelle impostazioni di macOS.", "version":"Versione", "credits":"Crediti", "author":"Autore", "site":"Sito", "code":"Codice", "license":"Licenza", "settings":"Impostazioni…", "title":"Impostazioni", "language":"Lingua", "system":"Lingua del sistema", "animated":"Icona animata durante la riproduzione", "resume":"Riproduci l’ultima stazione all’avvio"],
+        "en": ["login":"Launch Radio Menu at login", "loginApproval":"To finish enabling, allow Radio Menu in macOS Login Items.", "loginOpen":"Open Login Items", "loginError":"Could not change launch at login. Check Login Items in macOS settings.", "version":"Version", "credits":"Credits", "author":"Author", "site":"Website", "code":"Code", "license":"License", "settings":"Settings…", "title":"Settings", "language":"Language", "system":"System language", "animated":"Animate icon during playback", "resume":"Play last station on launch"],
+        "es": ["login":"Abrir Radio Menu al iniciar sesión", "loginApproval":"Para completar la activación, permite Radio Menu en Ítems de inicio de macOS.", "loginOpen":"Abrir Ítems de inicio", "loginError":"No se pudo cambiar el inicio automático. Comprueba los ítems de inicio de macOS.", "version":"Versión", "credits":"Créditos", "author":"Autor", "site":"Sitio web", "code":"Código", "license":"Licencia", "settings":"Ajustes…", "title":"Ajustes", "language":"Idioma", "system":"Idioma del sistema", "animated":"Animar el icono durante la reproducción", "resume":"Reproducir la última emisora al iniciar"],
+        "de": ["login":"Radio Menu bei der Anmeldung öffnen", "loginApproval":"Erlaube Radio Menu unter den macOS-Anmeldeobjekten, um die Aktivierung abzuschließen.", "loginOpen":"Anmeldeobjekte öffnen", "loginError":"Start bei der Anmeldung konnte nicht geändert werden. Prüfe die macOS-Anmeldeobjekte.", "version":"Version", "credits":"Mitwirkende", "author":"Autor", "site":"Website", "code":"Quellcode", "license":"Lizenz", "settings":"Einstellungen…", "title":"Einstellungen", "language":"Sprache", "system":"Systemsprache", "animated":"Symbol während der Wiedergabe animieren", "resume":"Letzten Sender beim Start wiedergeben"],
+        "fr": ["login":"Ouvrir Radio Menu à l’ouverture de session", "loginApproval":"Pour terminer l’activation, autorisez Radio Menu dans les éléments d’ouverture de macOS.", "loginOpen":"Ouvrir les éléments d’ouverture", "loginError":"Impossible de modifier le lancement à l’ouverture de session. Vérifiez les réglages macOS.", "version":"Version", "credits":"Crédits", "author":"Auteur", "site":"Site web", "code":"Code", "license":"Licence", "settings":"Réglages…", "title":"Réglages", "language":"Langue", "system":"Langue du système", "animated":"Animer l’icône pendant la lecture", "resume":"Lire la dernière station au démarrage"],
+        "zh": ["login":"登录时启动 Radio Menu", "loginApproval":"要完成启用，请在 macOS 登录项中允许 Radio Menu。", "loginOpen":"打开登录项", "loginError":"无法更改登录时启动设置。请检查 macOS 登录项。", "version":"版本", "credits":"鸣谢", "author":"作者", "site":"网站", "code":"源代码", "license":"许可证", "settings":"设置…", "title":"设置", "language":"语言", "system":"系统语言", "animated":"播放时显示动画图标", "resume":"启动时播放上次收听的电台"]
     ]
     static func text(_ key: String) -> String { settingsTranslations[language]?[key] ?? translations[language]?[key] ?? settingsTranslations["en"]?[key] ?? translations["en"]?[key] ?? key }
     static func format(_ key: String, _ value: String) -> String { String(format: text(key), value) }
@@ -51,6 +52,26 @@ final class Radio: ObservableObject {
     }
     @Published var resumeOnLaunch = UserDefaults.standard.bool(forKey: "resumeOnLaunch") {
         didSet { UserDefaults.standard.set(resumeOnLaunch, forKey: "resumeOnLaunch") }
+    }
+    @Published private(set) var launchAtLogin = false
+    @Published private(set) var loginNeedsApproval = false
+    @Published private(set) var loginError = false
+
+    func refreshLoginStatus() {
+        let state = SMAppService.mainApp.status
+        launchAtLogin = state == .enabled || state == .requiresApproval
+        loginNeedsApproval = state == .requiresApproval
+    }
+    func setLaunchAtLogin(_ enabled: Bool) {
+        loginError = false
+        do {
+            if enabled { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+            refreshLoginStatus()
+        } catch {
+            refreshLoginStatus()
+            if !loginNeedsApproval { loginError = true }
+        }
     }
     private var statusKey = "choose"
     private var statusStation = ""
@@ -187,6 +208,14 @@ struct SettingsView: View {
             }.frame(maxWidth: 330)
             Toggle(L.text("animated"), isOn: $radio.animated)
             Toggle(L.text("resume"), isOn: $radio.resumeOnLaunch)
+            Toggle(L.text("login"), isOn: Binding(get: { radio.launchAtLogin }, set: { radio.setLaunchAtLogin($0) }))
+            if radio.loginNeedsApproval {
+                Text(L.text("loginApproval")).font(.caption).foregroundStyle(.secondary)
+                Button(L.text("loginOpen")) { SMAppService.openSystemSettingsLoginItems() }
+            } else if radio.loginError {
+                Text(L.text("loginError")).font(.caption).foregroundStyle(.red)
+                Button(L.text("loginOpen")) { SMAppService.openSystemSettingsLoginItems() }
+            }
             Divider()
             Text(L.text("credits")).font(.headline)
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
@@ -197,7 +226,9 @@ struct SettingsView: View {
                 GridRow { Text(L.text("license")); Link("GNU GPL v3", destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!) }
             }.font(.callout)
             Spacer(minLength: 0)
-        }.padding(24).frame(width: 440, height: 400)
+        }.padding(24).frame(width: 470, height: 530)
+            .onAppear { radio.refreshLoginStatus() }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in radio.refreshLoginStatus() }
     }
 }
 
@@ -244,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func showSettings() {
         popover.performClose(nil)
+        radio.refreshLoginStatus()
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(radio: radio)))
             window.styleMask = [.titled, .closable, .miniaturizable]
