@@ -2,6 +2,9 @@
 
 A small native macOS menu bar app for listening to internet radio. Choose a station with a left click, or right-click the menu bar icon for Settings and Quit.
 
+<img width="716" height="598" alt="image" src="https://github.com/user-attachments/assets/01702def-670f-4c32-a2ae-77f4cf78fb39" />
+
+
 ## Features
 
 - Three preset stations and support for adding direct HTTP or HTTPS audio stream URLs.
