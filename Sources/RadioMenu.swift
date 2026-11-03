@@ -232,11 +232,24 @@ struct SettingsView: View {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+// Keep a popover inside the usable area of its own display, including when
+// the content grows after it opens. Screen coordinates are in AppKit points.
+func constrainedPopoverOrigin(frame: NSRect, visibleFrame: NSRect) -> NSPoint {
+    let margin: CGFloat = 4
+    let minX = visibleFrame.minX + margin
+    let maxX = max(minX, visibleFrame.maxX - frame.width - margin)
+    let minY = visibleFrame.minY + margin
+    let maxY = max(minY, visibleFrame.maxY - frame.height - margin)
+    return NSPoint(x: min(max(frame.minX, minX), maxX),
+                   y: min(max(frame.minY, minY), maxY))
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let radio = Radio()
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
+    private var popoverWindowObservers: [NSObjectProtocol] = []
     private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -248,6 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.action = #selector(statusClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         popover.behavior = .transient
+        popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: RadioView(radio: radio))
         radio.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self = self else { return }
@@ -272,6 +286,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItem.menu = nil
         } else if popover.isShown { popover.performClose(nil) }
         else { popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY) }
+    }
+    func popoverDidShow(_ notification: Notification) {
+        guard let window = popover.contentViewController?.view.window else { return }
+        removePopoverWindowObservers()
+        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification, NSWindow.didChangeScreenNotification] {
+            let observer = NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self, weak window] _ in
+                guard let self = self, let window = window else { return }
+                self.keepPopoverVisible(window)
+            }
+            popoverWindowObservers.append(observer)
+        }
+        keepPopoverVisible(window)
+        // AppKit may finish sizing the SwiftUI content after the show callback.
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self = self, let window = window, self.popover.isShown else { return }
+            self.keepPopoverVisible(window)
+        }
+    }
+    func popoverDidClose(_ notification: Notification) { removePopoverWindowObservers() }
+    private func removePopoverWindowObservers() {
+        popoverWindowObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        popoverWindowObservers.removeAll()
+    }
+    private func keepPopoverVisible(_ window: NSWindow) {
+        guard popover.isShown, let screen = statusItem.button?.window?.screen ?? window.screen else { return }
+        let origin = constrainedPopoverOrigin(frame: window.frame, visibleFrame: screen.visibleFrame)
+        if origin != window.frame.origin { window.setFrameOrigin(origin) }
     }
     @objc private func showSettings() {
         popover.performClose(nil)
