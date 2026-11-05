@@ -232,24 +232,33 @@ struct SettingsView: View {
     }
 }
 
-// Keep a popover inside the usable area of its own display, including when
-// the content grows after it opens. Screen coordinates are in AppKit points.
-func constrainedPopoverOrigin(frame: NSRect, visibleFrame: NSRect) -> NSPoint {
-    let margin: CGFloat = 4
-    let minX = visibleFrame.minX + margin
-    let maxX = max(minX, visibleFrame.maxX - frame.width - margin)
-    let minY = visibleFrame.minY + margin
-    let maxY = max(minY, visibleFrame.maxY - frame.height - margin)
-    return NSPoint(x: min(max(frame.minX, minX), maxX),
-                   y: min(max(frame.minY, minY), maxY))
+// A key-capable, non-activating panel keeps text fields usable without
+// activating the whole app. Escape closes the panel like a menu.
+final class RadioPanel: NSPanel {
+    var onEscape: (() -> Void)?
+    override var canBecomeKey: Bool { true }
+    override func cancelOperation(_ sender: Any?) { onEscape?() }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+// Position below the menu bar before showing; clamp to the target display.
+func radioPanelFrame(size: NSSize, anchor: NSRect, visible: NSRect) -> NSRect {
+    let margin: CGFloat = 4
+    let minX = visible.minX + margin
+    let maxX = max(minX, visible.maxX - size.width - margin)
+    let x = min(max(anchor.midX - size.width / 2, minX), maxX)
+    let top = min(anchor.minY, visible.maxY) - margin
+    let y = max(visible.minY + margin, top - size.height)
+    return NSRect(x: x, y: y, width: size.width, height: size.height)
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let radio = Radio()
     private var statusItem: NSStatusItem!
-    private let popover = NSPopover()
+    private var radioPanel: RadioPanel?
+    private var radioView: NSHostingView<RadioView>?
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
     private var settingsWindow: NSWindow?
-    private var popoverWindowObservers: [NSObjectProtocol] = []
     private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -260,19 +269,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         button.target = self
         button.action = #selector(statusClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        popover.behavior = .transient
-        popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: RadioView(radio: radio))
         radio.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self = self else { return }
             self.statusItem.button?.image = self.radio.icon
             self.settingsWindow?.title = L.text("title")
+            if self.radioPanel?.isVisible == true {
+                DispatchQueue.main.async { [weak self] in self?.sizeAndPositionRadioPanel() }
+            }
         }.store(in: &subscriptions)
         radio.resumeLastStation()
     }
     @objc private func statusClicked(_ sender: NSStatusBarButton) {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            popover.performClose(nil)
+            hideRadioPanel()
             let menu = NSMenu()
             let settings = NSMenuItem(title: L.text("settings"), action: #selector(showSettings), keyEquivalent: ",")
             settings.target = self
@@ -284,38 +293,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             statusItem.menu = menu
             sender.performClick(nil)
             statusItem.menu = nil
-        } else if popover.isShown { popover.performClose(nil) }
-        else { popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY) }
+        } else if radioPanel?.isVisible == true { hideRadioPanel() }
+        else { showRadioPanel() }
     }
-    func popoverDidShow(_ notification: Notification) {
-        guard let window = popover.contentViewController?.view.window else { return }
-        removePopoverWindowObservers()
-        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification, NSWindow.didChangeScreenNotification] {
-            let observer = NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self, weak window] _ in
-                guard let self = self, let window = window else { return }
-                self.keepPopoverVisible(window)
-            }
-            popoverWindowObservers.append(observer)
+    private func makeRadioPanel() {
+        let panel = RadioPanel(contentRect: NSRect(x: 0, y: 0, width: 340, height: 300),
+                               styleMask: [.borderless, .nonactivatingPanel],
+                               backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isFloatingPanel = true
+        panel.level = .popUpMenu
+        panel.animationBehavior = .none
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
+        panel.onEscape = { [weak self] in self?.hideRadioPanel() }
+        let background = NSVisualEffectView()
+        background.material = .popover
+        background.blendingMode = .behindWindow
+        background.state = .active
+        background.wantsLayer = true
+        background.layer?.cornerRadius = 12
+        background.layer?.masksToBounds = true
+        let view = NSHostingView(rootView: RadioView(radio: radio))
+        view.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+            view.topAnchor.constraint(equalTo: background.topAnchor),
+            view.bottomAnchor.constraint(equalTo: background.bottomAnchor)
+        ])
+        panel.contentView = background
+        radioPanel = panel
+        radioView = view
+    }
+    private func showRadioPanel() {
+        if radioPanel == nil { makeRadioPanel() }
+        guard let panel = radioPanel else { return }
+        // Size and position while hidden so the first visible frame is correct.
+        sizeAndPositionRadioPanel()
+        panel.makeKeyAndOrderFront(nil)
+        installMouseMonitors()
+    }
+    private func sizeAndPositionRadioPanel() {
+        guard let panel = radioPanel, let view = radioView,
+              let button = statusItem.button, let buttonWindow = button.window,
+              let screen = buttonWindow.screen else { return }
+        view.layoutSubtreeIfNeeded()
+        let measured = view.fittingSize
+        guard measured.width > 0, measured.height > 0 else { return }
+        let anchor = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        let frame = radioPanelFrame(size: measured, anchor: anchor, visible: screen.visibleFrame)
+        if panel.frame != frame { panel.setFrame(frame, display: panel.isVisible, animate: false) }
+    }
+    private func installMouseMonitors() {
+        removeMouseMonitors()
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.dismissPanelIfOutside()
+            return event
         }
-        keepPopoverVisible(window)
-        // AppKit may finish sizing the SwiftUI content after the show callback.
-        DispatchQueue.main.async { [weak self, weak window] in
-            guard let self = self, let window = window, self.popover.isShown else { return }
-            self.keepPopoverVisible(window)
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            DispatchQueue.main.async { self?.dismissPanelIfOutside() }
         }
     }
-    func popoverDidClose(_ notification: Notification) { removePopoverWindowObservers() }
-    private func removePopoverWindowObservers() {
-        popoverWindowObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        popoverWindowObservers.removeAll()
+    private func dismissPanelIfOutside() {
+        guard let panel = radioPanel, panel.isVisible else { return }
+        let point = NSEvent.mouseLocation
+        if panel.frame.contains(point) { return }
+        if let button = statusItem.button, let window = button.window {
+            let buttonFrame = window.convertToScreen(button.convert(button.bounds, to: nil))
+            if buttonFrame.contains(point) { return }
+        }
+        hideRadioPanel()
     }
-    private func keepPopoverVisible(_ window: NSWindow) {
-        guard popover.isShown, let screen = statusItem.button?.window?.screen ?? window.screen else { return }
-        let origin = constrainedPopoverOrigin(frame: window.frame, visibleFrame: screen.visibleFrame)
-        if origin != window.frame.origin { window.setFrameOrigin(origin) }
+    private func removeMouseMonitors() {
+        if let monitor = localMouseMonitor { NSEvent.removeMonitor(monitor); localMouseMonitor = nil }
+        if let monitor = globalMouseMonitor { NSEvent.removeMonitor(monitor); globalMouseMonitor = nil }
+    }
+    private func hideRadioPanel() {
+        radioPanel?.orderOut(nil)
+        removeMouseMonitors()
     }
     @objc private func showSettings() {
-        popover.performClose(nil)
+        hideRadioPanel()
         radio.refreshLoginStatus()
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(radio: radio)))
