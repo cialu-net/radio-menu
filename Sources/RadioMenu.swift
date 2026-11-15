@@ -9,6 +9,7 @@ import AVFoundation
 import AppKit
 import Combine
 import ServiceManagement
+import UniformTypeIdentifiers
 
 enum L {
     static var language: String {
@@ -32,7 +33,15 @@ enum L {
         "fr": ["login":"Ouvrir Radio Menu à l’ouverture de session", "loginApproval":"Pour terminer l’activation, autorisez Radio Menu dans les éléments d’ouverture de macOS.", "loginOpen":"Ouvrir les éléments d’ouverture", "loginError":"Impossible de modifier le lancement à l’ouverture de session. Vérifiez les réglages macOS.", "version":"Version", "credits":"Crédits", "author":"Auteur", "site":"Site web", "code":"Code", "license":"Licence", "settings":"Réglages…", "title":"Réglages", "language":"Langue", "system":"Langue du système", "animated":"Animer l’icône pendant la lecture", "resume":"Lire la dernière station au démarrage"],
         "zh": ["login":"登录时启动 Radio Menu", "loginApproval":"要完成启用，请在 macOS 登录项中允许 Radio Menu。", "loginOpen":"打开登录项", "loginError":"无法更改登录时启动设置。请检查 macOS 登录项。", "version":"版本", "credits":"鸣谢", "author":"作者", "site":"网站", "code":"源代码", "license":"许可证", "settings":"设置…", "title":"设置", "language":"语言", "system":"系统语言", "animated":"播放时显示动画图标", "resume":"启动时播放上次收听的电台"]
     ]
-    static func text(_ key: String) -> String { settingsTranslations[language]?[key] ?? translations[language]?[key] ?? settingsTranslations["en"]?[key] ?? translations["en"]?[key] ?? key }
+    static let libraryTranslations: [String: [String: String]] = [
+        "it": ["export":"Esporta stazioni…", "import":"Importa stazioni…", "exportError":"Impossibile esportare le stazioni.", "importError":"Impossibile importare il file: formato non valido o nessuna stazione valida.", "importTitle":"Importa stazioni", "importMessage":"Trovate %@ stazioni valide. Vuoi aggiungerle a quelle esistenti o sostituire la lista?", "merge":"Aggiungi", "replace":"Sostituisci"],
+        "en": ["export":"Export Stations…", "import":"Import Stations…", "exportError":"Could not export the stations.", "importError":"Could not import the file: invalid format or no valid stations.", "importTitle":"Import Stations", "importMessage":"Found %@ valid stations. Add them to your current list or replace it?", "merge":"Add", "replace":"Replace"],
+        "es": ["export":"Exportar emisoras…", "import":"Importar emisoras…", "exportError":"No se pudieron exportar las emisoras.", "importError":"No se pudo importar el archivo: formato no válido o sin emisoras válidas.", "importTitle":"Importar emisoras", "importMessage":"Se han encontrado %@ emisoras válidas. ¿Añadirlas a la lista actual o sustituirla?", "merge":"Añadir", "replace":"Sustituir"],
+        "de": ["export":"Sender exportieren…", "import":"Sender importieren…", "exportError":"Die Sender konnten nicht exportiert werden.", "importError":"Die Datei konnte nicht importiert werden: ungültiges Format oder keine gültigen Sender.", "importTitle":"Sender importieren", "importMessage":"%@ gültige Sender gefunden. Zur aktuellen Liste hinzufügen oder die Liste ersetzen?", "merge":"Hinzufügen", "replace":"Ersetzen"],
+        "fr": ["export":"Exporter les stations…", "import":"Importer des stations…", "exportError":"Impossible d’exporter les stations.", "importError":"Impossible d’importer le fichier : format invalide ou aucune station valide.", "importTitle":"Importer des stations", "importMessage":"%@ stations valides trouvées. Les ajouter à la liste actuelle ou la remplacer ?", "merge":"Ajouter", "replace":"Remplacer"],
+        "zh": ["export":"导出电台…", "import":"导入电台…", "exportError":"无法导出电台。", "importError":"无法导入该文件：格式无效或没有有效的电台。", "importTitle":"导入电台", "importMessage":"找到 %@ 个有效电台。要添加到当前列表还是替换列表？", "merge":"添加", "replace":"替换"]
+    ]
+    static func text(_ key: String) -> String { settingsTranslations[language]?[key] ?? translations[language]?[key] ?? libraryTranslations[language]?[key] ?? settingsTranslations["en"]?[key] ?? translations["en"]?[key] ?? libraryTranslations["en"]?[key] ?? key }
     static func format(_ key: String, _ value: String) -> String { String(format: text(key), value) }
 }
 
@@ -40,6 +49,18 @@ struct Station: Identifiable, Codable {
     var id = UUID()
     var name: String
     var url: String
+}
+
+// Portable representation used for exporting/importing the station list.
+struct StationEntry: Codable { var name: String; var url: String }
+struct StationFile: Codable { var version: Int; var stations: [StationEntry] }
+
+// Receives timed metadata (ICY StreamTitle, ID3…) from the current stream.
+final class MetadataReceiver: NSObject, AVPlayerItemMetadataOutputPushDelegate {
+    var onGroups: (([AVTimedMetadataGroup]) -> Void)?
+    func metadataOutput(_ output: AVPlayerItemMetadataOutput, didOutputTimedMetadataGroups groups: [AVTimedMetadataGroup], from track: AVPlayerItemTrack?) {
+        onGroups?(groups)
+    }
 }
 
 final class Radio: ObservableObject {
@@ -88,6 +109,10 @@ final class Radio: ObservableObject {
     @Published var current: UUID?
     @Published var status = L.text("choose")
     @Published var frame = 0
+    @Published private(set) var artist = ""
+    @Published private(set) var songTitle = ""
+    private var metadataOutput: AVPlayerItemMetadataOutput?
+    private var metadataReceiver: MetadataReceiver?
     private var timer: Timer?
     @Published var volume: Double = 0.7 { didSet { player?.volume = Float(volume); UserDefaults.standard.set(volume, forKey: "volume") } }
     private var player: AVPlayer?
@@ -120,8 +145,16 @@ final class Radio: ObservableObject {
         guard let url = URL(string: station.url) else { setStatus("invalid"); return }
         timer?.invalidate(); timer = nil; frame = 0
         observation = nil
+        clearNowPlaying()
         player?.pause()
         let item = AVPlayerItem(url: url)
+        let receiver = MetadataReceiver()
+        receiver.onGroups = { [weak self] groups in self?.handleMetadata(groups, stationID: station.id) }
+        let output = AVPlayerItemMetadataOutput(identifiers: nil)
+        output.setDelegate(receiver, queue: .main)
+        item.add(output)
+        metadataReceiver = receiver
+        metadataOutput = output
         player = AVPlayer(playerItem: item)
         player?.volume = Float(volume)
         current = station.id
@@ -131,7 +164,7 @@ final class Radio: ObservableObject {
             DispatchQueue.main.async {
                 guard let self = self, self.current == station.id else { return }
                 if item.status == .readyToPlay { self.setStatus("playing", station: station.name); self.startAnimation() }
-                else if item.status == .failed { self.setStatus("failed"); self.timer?.invalidate(); self.timer = nil; self.current = nil }
+                else if item.status == .failed { self.setStatus("failed"); self.timer?.invalidate(); self.timer = nil; self.current = nil; self.clearNowPlaying() }
             }
         }
         player?.play()
@@ -154,7 +187,73 @@ final class Radio: ObservableObject {
         image.isTemplate = true
         return image
     }
-    func stop() { timer?.invalidate(); timer = nil; observation = nil; player?.pause(); player = nil; current = nil; setStatus("stopped") }
+    func stop() { timer?.invalidate(); timer = nil; observation = nil; player?.pause(); player = nil; current = nil; clearNowPlaying(); setStatus("stopped") }
+
+    // MARK: Now playing
+    private func clearNowPlaying() {
+        metadataReceiver = nil; metadataOutput = nil
+        if !artist.isEmpty { artist = "" }
+        if !songTitle.isEmpty { songTitle = "" }
+    }
+    private func handleMetadata(_ groups: [AVTimedMetadataGroup], stationID: UUID) {
+        guard current == stationID else { return }
+        let items = groups.flatMap { $0.items }
+        Task { @MainActor [weak self] in
+            var artistValue: String?, titleValue: String?, streamValue: String?
+            for item in items {
+                guard let loaded = try? await item.load(.stringValue) else { continue }
+                let value = loaded.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !value.isEmpty else { continue }
+                if item.identifier == .icyMetadataStreamTitle { streamValue = value }
+                else if item.commonKey == .commonKeyArtist { artistValue = value }
+                else if item.commonKey == .commonKeyTitle { titleValue = value }
+            }
+            guard let self = self, self.current == stationID else { return }
+            // Icecast/Shoutcast send a single "Artist - Title" string; other formats may provide separate fields.
+            if let raw = streamValue ?? (artistValue == nil ? titleValue : nil) {
+                if let range = raw.range(of: " - ") {
+                    self.artist = String(raw[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    self.songTitle = String(raw[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                } else {
+                    self.artist = ""; self.songTitle = raw
+                }
+            } else if artistValue != nil || titleValue != nil {
+                self.artist = artistValue ?? ""; self.songTitle = titleValue ?? ""
+            }
+        }
+    }
+    var nowPlayingText: String {
+        [artist, songTitle].filter { !$0.isEmpty }.joined(separator: " – ")
+    }
+
+    // MARK: Export / import
+    func exportData() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(StationFile(version: 1, stations: stations.map { StationEntry(name: $0.name, url: $0.url) }))
+    }
+    /// Accepts either {"version":1,"stations":[…]} or a bare array of {name,url}. Invalid entries are skipped.
+    func decodeStations(from data: Data) throws -> [Station] {
+        let decoder = JSONDecoder()
+        let entries: [StationEntry]
+        if let file = try? decoder.decode(StationFile.self, from: data) { entries = file.stations }
+        else { entries = try decoder.decode([StationEntry].self, from: data) }
+        return entries.compactMap { entry in
+            let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let address = entry.url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { return nil }
+            return Station(name: name, url: address)
+        }
+    }
+    func mergeStations(_ imported: [Station]) {
+        var list = stations
+        for station in imported where !list.contains(where: { $0.url.caseInsensitiveCompare(station.url) == .orderedSame }) { list.append(station) }
+        stations = list
+    }
+    func replaceStations(_ imported: [Station]) {
+        stop()
+        stations = imported
+    }
     func remove(_ station: Station) { if current == station.id { stop() }; stations.removeAll { $0.id == station.id } }
 }
 
@@ -164,6 +263,12 @@ struct RadioView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack { Image(systemName: "radio.fill").foregroundStyle(.tint); Text("Radio Menu").font(.headline); Spacer(); Button(L.text("quit")) { NSApplication.shared.terminate(nil) }.buttonStyle(.borderless) }
             Text(radio.status).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            if radio.current != nil && (!radio.songTitle.isEmpty || !radio.artist.isEmpty) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if !radio.songTitle.isEmpty { Text(radio.songTitle).font(.subheadline.weight(.semibold)).lineLimit(2) }
+                    if !radio.artist.isEmpty { Text(radio.artist).font(.callout).foregroundStyle(.secondary).lineLimit(1) }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
             Divider()
             if radio.stations.isEmpty { Text(L.text("empty")).foregroundStyle(.secondary) }
             ScrollView { VStack(spacing: 3) {
@@ -272,6 +377,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         radio.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in
             guard let self = self else { return }
             self.statusItem.button?.image = self.radio.icon
+            self.statusItem.button?.toolTip = self.radio.nowPlayingText.isEmpty ? "Radio Menu" : self.radio.nowPlayingText
             self.settingsWindow?.title = L.text("title")
             if self.radioPanel?.isVisible == true {
                 DispatchQueue.main.async { [weak self] in self?.sizeAndPositionRadioPanel() }
@@ -286,6 +392,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let settings = NSMenuItem(title: L.text("settings"), action: #selector(showSettings), keyEquivalent: ",")
             settings.target = self
             menu.addItem(settings)
+            menu.addItem(.separator())
+            let importItem = NSMenuItem(title: L.text("import"), action: #selector(importStations), keyEquivalent: "")
+            importItem.target = self
+            menu.addItem(importItem)
+            let exportItem = NSMenuItem(title: L.text("export"), action: #selector(exportStations), keyEquivalent: "")
+            exportItem.target = self
+            menu.addItem(exportItem)
             menu.addItem(.separator())
             let quit = NSMenuItem(title: L.text("quit"), action: #selector(quitApp), keyEquivalent: "q")
             quit.target = self
@@ -390,6 +503,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow?.title = L.text("title")
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc private func exportStations() {
+        hideRadioPanel()
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "RadioMenu-stations.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try radio.exportData().write(to: url, options: .atomic) }
+        catch { showError(L.text("exportError")) }
+    }
+    @objc private func importStations() {
+        hideRadioPanel()
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let data = try? Data(contentsOf: url), let imported = try? radio.decodeStations(from: data), !imported.isEmpty else {
+            showError(L.text("importError")); return
+        }
+        let alert = NSAlert()
+        alert.messageText = L.text("importTitle")
+        alert.informativeText = L.format("importMessage", String(imported.count))
+        alert.addButton(withTitle: L.text("merge"))
+        alert.addButton(withTitle: L.text("replace"))
+        alert.addButton(withTitle: L.text("cancel"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: radio.mergeStations(imported)
+        case .alertSecondButtonReturn: radio.replaceStations(imported)
+        default: break
+        }
+    }
+    private func showError(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = message
+        alert.runModal()
     }
     @objc private func quitApp() { NSApp.terminate(nil) }
 }
